@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KatWorld - Destruction Simulator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        /* Removed incorrect @font-face rule */
+
+        * {
+            image-rendering: pixelated; /* Keep textures sharp */
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            overflow: hidden;
+            font-family: 'Press Start 2P', cursive; /* Use the loaded pixel font */
+            background: #222;
+            color: white; /* Default text color */
+            touch-action: manipulation; /* Prevent unwanted touch behaviors */
+        }
+
+        /* --- SCREENS --- */
+        .screen {
+            position: absolute;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        #game-container, #loading-screen {
+            display: none; /* Hide initially */
+        }
+
+        /* --- HOME SCREEN --- */
+        #home-screen {
+            /* Uses default .screen styles */
+        }
+
+        .title {
+            font-size: clamp(1.8rem, 5vw, 2.5rem); /* Responsive font size */
+            color: #FF6B6B;
+            text-shadow: 4px 4px 0 #4ECDC4;
+            margin: 2rem 1rem; /* Added horizontal margin */
+            line-height: 1.4;
+        }
+
+        .pixel-btn {
+            padding: 15px 30px;
+            margin: 10px;
+            background: #4ECDC4;
+            color: white;
+            border: none;
+            font-family: inherit; /* Inherit from body */
+            font-size: 1rem;
+            cursor: pointer;
+            box-shadow: 5px 5px 0 #FF6B6B;
+            transition: all 0.1s ease-out; /* Smoother transition */
+            text-transform: uppercase; /* Make buttons stand out */
+        }
+
+        .pixel-btn:hover, .pixel-btn:focus { /* Added focus style for accessibility */
+            transform: translate(2px, 2px);
+            box-shadow: 3px 3px 0 #FF6B6B;
+            background: #3DBEB5;
+            outline: none; /* Remove default focus outline */
+        }
+
+        #credits {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.7rem;
+            line-height: 1.6;
+            opacity: 0.8;
+            width: 90%; /* Ensure it doesn't overflow on small screens */
+        }
+
+        /* --- LOADING SCREEN --- */
+        #loading-screen {
+             /* Uses default .screen styles */
+        }
+
+        #loading-bar-container { /* Added a container for better centering */
+             display: flex;
+             flex-direction: column;
+             align-items: center;
+             margin: 30px 0;
+        }
+
+        #loading-bar {
+            width: 300px;
+            max-width: 80vw; /* Ensure it fits on small screens */
+            height: 30px;
+            border: 4px solid white;
+            background-color: #333; /* Background for the empty part */
+        }
+
+        #loading-progress {
+            height: 100%;
+            width: 0%;
+            background: #4ECDC4;
+            transition: width 0.2s linear; /* Slightly smoother progress */
+        }
+
+        #loading-text {
+            font-size: 0.8rem;
+            min-height: 20px; /* Prevent layout shift */
+            margin-top: 10px;
+        }
+
+        /* --- GAME SCREEN --- */
+        #game-container {
+            /* Game container takes full screen but canvas is centered if needed */
+            background-color: #222; /* Match body background */
+        }
+
+        #game-canvas {
+            display: block; /* Remove extra space below canvas */
+            background: #87CEEB; /* Sky color */
+            border: 2px solid #111; /* Optional border */
+        }
+
+        #game-ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            color: white;
+            font-size: 0.8rem;
+            border: 3px solid white;
+            z-index: 10; /* Ensure UI is on top */
+        }
+        #game-ui div {
+            margin-bottom: 5px;
+        }
+
+
+        #tools {
+            position: absolute;
+            bottom: 15px; /* Slightly more space from bottom */
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border: 3px solid white;
+            z-index: 10; /* Ensure UI is on top */
+        }
+
+        .tool-btn {
+            padding: 10px 12px; /* Slightly larger click area */
+            background: #555;
+            color: white;
+            border: 2px solid #777;
+            cursor: pointer;
+            font-family: inherit; /* Inherit from body */
+            font-size: 0.7rem;
+            transition: background-color 0.1s, border-color 0.1s; /* Smooth transitions */
+            text-transform: uppercase;
+        }
+
+        .tool-btn:hover {
+            background-color: #666;
+            border-color: #999;
+        }
+
+        .tool-btn.active {
+            background: #FF6B6B; /* Use theme color */
+            border: 2px solid #fff;
+            color: #fff;
+        }
+        .tool-btn.active:hover {
+            background: #E05A5A; /* Darker shade on hover */
+        }
+
+    </style>
+</head>
+<body>
+    <div id="home-screen" class="screen">
+        <h1 class="title">KATWORLD<br>DESTRUCTION<br>SIMULATOR</h1>
+        <button class="pixel-btn" id="start-btn">Start Game</button>
+        <div id="credits">
+            CREATED BY SIMKAT<br>
+            PIXEL PHYSICS ENGINE v1.1<br>
+            © <span id="current-year">2023</span> ALL RIGHTS RESERVED
+        </div>
+    </div>
+
+    <div id="loading-screen" class="screen">
+        <h1 class="title">LOADING KATWORLD</h1>
+        <div id="loading-bar-container">
+            <div id="loading-bar">
+                <div id="loading-progress"></div>
+            </div>
+            <div id="loading-text">Booting kat engine...</div>
+        </div>
+    </div>
+
+    <div id="game-container" class="screen">
+        <canvas id="game-canvas"></canvas>
+        <div id="game-ui">
+            <div>TOOL: <span id="current-tool-ui">BOMB</span></div>
+            <div id="fps">FPS: --</div>
+            </div>
+        <div id="tools">
+            <button class="tool-btn active" id="bomb-btn" data-tool="bomb">BOMB</button>
+            <button class="tool-btn" id="block-btn" data-tool="block">BLOCK</button> <button class="tool-btn" id="water-btn" data-tool="water">WATER</button>
+            </div>
+    </div>
+
+    <script>
+        // Set current year in credits
+        document.getElementById('current-year').textContent = new Date().getFullYear();
+
+        // =====================
+        // SCREEN MANAGEMENT
+        // =====================
+        const homeScreen = document.getElementById('home-screen');
+        const loadingScreen = document.getElementById('loading-screen');
+        const gameContainer = document.getElementById('game-container');
+        const startBtn = document.getElementById('start-btn');
+        const loadingProgressBar = document.getElementById('loading-progress');
+        const loadingText = document.getElementById('loading-text');
+
+        startBtn.addEventListener('click', showLoadingScreen);
+
+        function showLoadingScreen() {
+            homeScreen.style.display = 'none';
+            loadingScreen.style.display = 'flex';
+            startFakeLoading();
+        }
+
+        function showGameScreen() {
+            loadingScreen.style.display = 'none';
+            gameContainer.style.display = 'flex'; // Use flex to center canvas if needed
+            initGame(); // Initialize game logic AFTER showing the screen
+        }
+
+        function startFakeLoading() {
+            const loadingMessages = [
+                "Initializing physics engine...",
+                "Generating terrain features...",
+                "Placing ores strategically...",
+                "Growing digital trees...",
+                "Simulating water flow...",
+                "Calibrating explosion radius...",
+                "Waking up the kat...",
+                "Ready for destruction!"
+            ];
+
+            let progress = 0;
+            let messageIndex = 0;
+            loadingText.textContent = loadingMessages[messageIndex]; // Show first message immediately
+
+            const loadInterval = setInterval(() => {
+                progress += Math.random() * 10 + 5; // More consistent progress
+                progress = Math.min(progress, 100);
+                loadingProgressBar.style.width = `${progress}%`;
+
+                const currentMessageIndex = Math.min(Math.floor(progress / (100 / loadingMessages.length)), loadingMessages.length - 1);
+                if(currentMessageIndex > messageIndex) {
+                    messageIndex = currentMessageIndex;
+                    loadingText.textContent = loadingMessages[messageIndex];
+                }
+
+                if (progress >= 100) {
+                    clearInterval(loadInterval);
+                    loadingText.textContent = loadingMessages[loadingMessages.length - 1]; // Ensure last message shows
+                    setTimeout(showGameScreen, 600); // Short delay before showing game
+                }
+            }, 150); // Slightly faster interval
+        }
+
+        // =====================
+        // GAME ENGINE
+        // =====================
+        function initGame() {
+            const canvas = document.getElementById('game-canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.imageSmoothingEnabled = false; // Ensure pixelated rendering
+
+            // --- Constants ---
+            const PIXEL_SIZE = 10;
+            const WORLD_WIDTH = 100; // In pixels/blocks
+            const WORLD_HEIGHT = 60; // In pixels/blocks
+            const GRAVITY = 0.05;
+            const WATER_SPREAD_CHANCE = 0.6; // How likely water is to spread sideways
+
+            // --- Canvas Setup ---
+            // Set canvas size based on world dimensions
+            canvas.width = WORLD_WIDTH * PIXEL_SIZE;
+            canvas.height = WORLD_HEIGHT * PIXEL_SIZE;
+            // Center canvas if container is larger (using flexbox on #game-container)
+
+            // --- Block Types ---
+            // Using objects for easier property access
+            const BLOCK_TYPES = {
+                AIR:        {id: 0, color: 'transparent', name: 'Air'}, // Transparent, acts as empty
+                DIRT:       {id: 1, color: '#8B4513', health: 1, name: 'Dirt'},
+                GRASS:      {id: 2, color: '#7CFC00', topColor: '#228B22', health: 1, name: 'Grass'},
+                STONE:      {id: 3, color: '#808080', health: 3, name: 'Stone'},
+                WATER:      {id: 4, color: 'rgba(30, 144, 255, 0.7)', fluid: true, name: 'Water'}, // Semi-transparent water
+                WOOD:       {id: 5, color: '#A0522D', health: 2, name: 'Wood'}, // Lighter wood
+                LEAF:       {id: 6, color: 'rgba(34, 139, 34, 0.8)', transparent: true, health: 1, name: 'Leaf'}, // Semi-transparent leaves
+                COAL:       {id: 7, color: '#333', sparkleColor: '#555', health: 2, name: 'Coal'},
+                IRON:       {id: 8, color: '#B3B3B3', sparkleColor: '#DDD', health: 4, name: 'Iron'},
+                GOLD:       {id: 9, color: '#FFD700', sparkleColor: '#FFFACD', health: 3, name: 'Gold'},
+                DIAMOND:    {id: 10, color: '#00FFFF', sparkleColor: '#AFFFFF', health: 5, name: 'Diamond'},
+                BEDROCK:    {id: 11, color: '#4A4A4A', health: Infinity, name: 'Bedrock'} // Slightly lighter bedrock
+            };
+            // Add a reverse lookup for convenience if needed (e.g., block ID to block object)
+            const BLOCK_ID_MAP = {};
+            for (const key in BLOCK_TYPES) {
+                BLOCK_ID_MAP[BLOCK_TYPES[key].id] = BLOCK_TYPES[key];
+            }
+
+
+            // --- Game State ---
+            let world = []; // Will be initialized by generateWorld
+            let physicsBodies = []; // For falling debris/bombs etc.
+            let particles = []; // For visual effects like explosions, sparkles
+            let activeTool = 'bomb'; // Default tool
+            let selectedBlock = BLOCK_TYPES.DIRT; // Block to place with 'block' tool
+            let mousePos = { x: 0, y: 0, gridX: 0, gridY: 0 };
+            let isMouseDown = false;
+            let lastFrameTime = 0;
+            let frameCount = 0;
+            let fps = 0;
+
+            // UI Elements References
+            const fpsDisplay = document.getElementById('fps');
+            const currentToolUI = document.getElementById('current-tool-ui');
+
+
+            // --- World Generation (FIXED & POLISHED) ---
+            function generateWorld() {
+                console.log("Generating world...");
+                world = Array(WORLD_WIDTH).fill(null).map(() => Array(WORLD_HEIGHT).fill(BLOCK_TYPES.AIR));
+
+                const baseSurfaceLevel = Math.floor(WORLD_HEIGHT * 0.6); // Average ground height (lower means higher ground)
+                const terrainRoughness = 5; // Max height variation
+                const bedrockDepth = 4; // Layers of bedrock at the bottom
+                const dirtDepth = 3; // Layers of dirt below grass
+
+                // 1. Generate Terrain Layers
+                for (let x = 0; x < WORLD_WIDTH; x++) {
+                    // Calculate surface height using a simple sine wave for variation
+                    const surfaceY = Math.floor(baseSurfaceLevel + Math.sin(x * 0.1) * terrainRoughness);
+
+                    for (let y = 0; y < WORLD_HEIGHT; y++) {
+                        if (y >= WORLD_HEIGHT - bedrockDepth) {
+                            // Bedrock Layer (Bottom)
+                             world[x][y] = BLOCK_TYPES.BEDROCK;
+                        } else if (y >= surfaceY) {
+                            // Ground Layers (Working upwards from bottom stone to top grass)
+                            if (y === surfaceY) {
+                                world[x][y] = BLOCK_TYPES.GRASS; // Top layer is grass
+                            } else if (y < surfaceY + dirtDepth) {
+                                world[x][y] = BLOCK_TYPES.DIRT; // Dirt layers below grass
+                            } else {
+                                // Stone Layer (Below dirt down to bedrock)
+                                // Add ore generation logic here
+                                const depthFactor = (y - surfaceY) / (WORLD_HEIGHT - surfaceY - bedrockDepth); // 0 (near dirt) to 1 (near bedrock)
+                                const rand = Math.random();
+
+                                if (rand < 0.01 * depthFactor * depthFactor) world[x][y] = BLOCK_TYPES.DIAMOND;
+                                else if (rand < 0.02 * depthFactor) world[x][y] = BLOCK_TYPES.GOLD;
+                                else if (rand < 0.05 * depthFactor) world[x][y] = BLOCK_TYPES.IRON;
+                                else if (rand < 0.10 * depthFactor) world[x][y] = BLOCK_TYPES.COAL;
+                                else world[x][y] = BLOCK_TYPES.STONE;
+                            }
+                        } else {
+                            // Sky / Air
+                            world[x][y] = BLOCK_TYPES.AIR;
+                        }
+                    }
+                }
+                console.log("Terrain generated.");
+
+                // 2. Generate Trees (After main terrain)
+                const treeSpacing = 8; // Average space between trees
+                const treeMargin = 10; // Don't place trees too close to edges
+                for (let x = treeMargin; x < WORLD_WIDTH - treeMargin; x++) {
+                    if (Math.random() < 1 / treeSpacing) {
+                         // Find the actual ground surface at this x
+                         let groundY = -1;
+                         for(let y = 0; y < WORLD_HEIGHT; y++) {
+                             if(world[x][y] !== BLOCK_TYPES.AIR) {
+                                 groundY = y - 1; // Tree base should be *above* the first solid block
+                                 break;
+                             }
+                         }
+                         // Only plant if found ground is suitable (grass/dirt) and enough space above
+                         if (groundY > 0 && groundY < baseSurfaceLevel &&
+                             (world[x][groundY + 1] === BLOCK_TYPES.GRASS || world[x][groundY + 1] === BLOCK_TYPES.DIRT))
+                         {
+                             generateTree(x, groundY);
+                             x += Math.floor(treeSpacing / 2); // Add extra spacing after placing a tree
+                         }
+                    }
+                }
+                 console.log("Trees generated.");
+
+                // 3. Generate Caves (Optional, can be intensive)
+                // generateCaves(5, 20, 5); // Example: 5 caves, average length 20, average width 5
+                // console.log("Caves generated.");
+
+                console.log("World generation complete.");
+            }
+
+            // --- Tree Generation Helper (FIXED) ---
+            function generateTree(x, groundY) {
+                 const minHeight = 4;
+                 const maxHeight = 7;
+                 const height = Math.floor(Math.random() * (maxHeight - minHeight + 1)) + minHeight;
+
+                 // Ensure tree doesn't go off-screen
+                 if (groundY - height <= 0) return; // Too tall for this spot
+
+                 // Place Trunk (Wood) - Builds upwards from groundY
+                 for (let dy = 0; dy < height; dy++) {
+                    const currentY = groundY - dy;
+                     if (currentY >= 0 && currentY < WORLD_HEIGHT) { // Check bounds
+                         // Allow tree trunk to replace AIR or LEAVES only (prevents weird overlaps)
+                         if(world[x][currentY] === BLOCK_TYPES.AIR || world[x][currentY] === BLOCK_TYPES.LEAF) {
+                             world[x][currentY] = BLOCK_TYPES.WOOD;
+                         } else {
+                             // Stop building trunk if blocked by solid ground (e.g., overhang)
+                             break;
+                         }
+                     }
+                 }
+
+                 // Place Leaves (Around the top of the trunk)
+                 const leafCenterY = groundY - height + 1; // Center of leaves is slightly above trunk top
+                 const leafRadius = 2;
+                 for (let lx = x - leafRadius; lx <= x + leafRadius; lx++) {
+                     for (let ly = leafCenterY - leafRadius; ly <= leafCenterY + leafRadius; ly++) {
+                         // Check bounds
+                         if (lx >= 0 && lx < WORLD_WIDTH && ly >= 0 && ly < WORLD_HEIGHT) {
+                             const distSq = (lx - x) * (lx - x) + (ly - leafCenterY) * (ly - leafCenterY);
+                             const maxDistSq = leafRadius * leafRadius + 1; // Make it slightly rounded
+
+                             // Place leaf if within radius and the spot is AIR (don't overwrite trunk)
+                             if (distSq < maxDistSq && world[lx][ly] === BLOCK_TYPES.AIR) {
+                                 if (Math.random() > 0.2) { // Add some randomness / gaps
+                                      world[lx][ly] = BLOCK_TYPES.LEAF;
+                                 }
+                             }
+                         }
+                     }
+                 }
+            }
+
+            // --- Cave Generation Helper (Example) ---
+            function generateCaves(count, maxLength, maxWidth) {
+                for (let i = 0; i < count; i++) {
+                    let caveX = Math.floor(Math.random() * WORLD_WIDTH);
+                    // Start caves below the typical surface level
+                    let caveY = Math.floor(Math.random() * (WORLD_HEIGHT - baseSurfaceLevel - bedrockDepth - 10)) + baseSurfaceLevel + 5;
+                    let caveLength = Math.floor(Math.random() * maxLength) + 5;
+                    let currentWidth = Math.floor(Math.random() * maxWidth) + 1;
+
+                    // Simple random walk for cave path
+                    for (let l = 0; l < caveLength; l++) {
+                        // Carve out area
+                        for (let dx = -Math.floor(currentWidth / 2); dx <= Math.ceil(currentWidth / 2); dx++) {
+                           for (let dy = -Math.floor(currentWidth / 2); dy <= Math.ceil(currentWidth / 2); dy++) {
+                               const nx = caveX + dx;
+                               const ny = caveY + dy;
+                               // Ensure carving stays within bounds and doesn't hit bedrock
+                               if (nx >= 0 && nx < WORLD_WIDTH && ny >= 0 && ny < WORLD_HEIGHT - bedrockDepth) {
+                                    // Check distance for rough circular shape
+                                    if (dx*dx + dy*dy <= (currentWidth/2)*(currentWidth/2) + 1) {
+                                        if(world[nx][ny] !== BLOCK_TYPES.BEDROCK) {
+                                            world[nx][ny] = BLOCK_TYPES.AIR;
+                                        }
+                                    }
+                                }
+                           }
+                        }
+
+                        // Move walker
+                        caveX += Math.floor(Math.random() * 3) - 1; // -1, 0, or 1
+                        caveY += Math.floor(Math.random() * 3) - 1; // -1, 0, or 1
+
+                        // Clamp position to avoid going out of bounds (mostly)
+                        caveX = Math.max(1, Math.min(WORLD_WIDTH - 2, caveX));
+                        caveY = Math.max(1, Math.min(WORLD_HEIGHT - bedrockDepth - 1, caveY));
+
+                        // Slightly change width randomly
+                        currentWidth += (Math.random() - 0.5) * 2;
+                        currentWidth = Math.max(1, Math.min(maxWidth, currentWidth));
+                    }
+                }
+            }
+
+
+            // --- Rendering (Polished) ---
+            function render() {
+                // Clear screen (Sky Color)
+                ctx.fillStyle = '#87CEEB';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Draw Blocks (Iterate through the world grid)
+                for (let x = 0; x < WORLD_WIDTH; x++) {
+                    for (let y = 0; y < WORLD_HEIGHT; y++) {
+                        const block = world[x][y];
+
+                        if (block !== BLOCK_TYPES.AIR) {
+                            // Determine color (handle special cases like Grass)
+                            let color = block.color;
+                            if (block === BLOCK_TYPES.GRASS) {
+                                // Check if block above is air or transparent to draw top color
+                                const blockAbove = (y > 0) ? world[x][y-1] : BLOCK_TYPES.AIR;
+                                if (blockAbove === BLOCK_TYPES.AIR || blockAbove.transparent || blockAbove.fluid) {
+                                    color = block.topColor || block.color;
+                                } else {
+                                    color = BLOCK_TYPES.DIRT.color; // Show dirt color if covered
+                                }
+                            } else if (block === BLOCK_TYPES.WOOD) {
+                                // Simple variation for wood grain appearance
+                                color = ((x + y) % 2 === 0) ? block.color : '#6B4226'; // Slightly darker variation
+                            }
+
+
+                            ctx.fillStyle = color;
+                            ctx.fillRect(
+                                x * PIXEL_SIZE,
+                                y * PIXEL_SIZE,
+                                PIXEL_SIZE,
+                                PIXEL_SIZE
+                            );
+
+                            // Optional: Add subtle outlines or shading
+                            // ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+                            // ctx.strokeRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
+
+
+                            // Ore Sparkles
+                            if (block.sparkleColor && Math.random() < 0.005) { // Reduce sparkle frequency
+                                particles.push({
+                                    x: x + Math.random(), // Position within the block
+                                    y: y + Math.random(),
+                                    vx: 0,
+                                    vy: 0,
+                                    color: block.sparkleColor,
+                                    size: Math.random() * 0.1 + 0.05, // Smaller sparkles
+                                    life: Math.random() * 20 + 10, // Shorter life
+                                    type: 'sparkle'
+                                });
+                            }
+                        }
+                    }
+                }
+
+                // Draw Particles
+                particles.forEach(p => {
+                    ctx.fillStyle = p.color;
+                    // Adjust position based on particle type if needed
+                    const drawX = p.x * PIXEL_SIZE;
+                    const drawY = p.y * PIXEL_SIZE;
+                    const drawSize = p.size * PIXEL_SIZE;
+                     ctx.fillRect(drawX - drawSize / 2, drawY - drawSize / 2, drawSize, drawSize); // Center particle
+                });
+
+                 // Draw Physics Bodies (Example: Red circles for bombs/debris)
+                physicsBodies.forEach(body => {
+                    ctx.fillStyle = body.color || '#FF0000'; // Use body color or default red
+                    ctx.beginPath();
+                    ctx.arc(
+                        body.x * PIXEL_SIZE,
+                        body.y * PIXEL_SIZE,
+                        body.radius * PIXEL_SIZE,
+                        0,
+                        Math.PI * 2
+                    );
+                    ctx.fill();
+
+                    // Add fuse effect for bombs
+                    if (body.type === 'bomb' && body.fuse > 0) {
+                        particles.push({
+                             x: body.x + (Math.random() - 0.5) * 0.2,
+                             y: body.y - body.radius + (Math.random() - 0.5) * 0.2,
+                             vx: (Math.random() - 0.5) * 0.02,
+                             vy: -Math.random() * 0.05,
+                             color: ['#FFA500', '#FF4500', '#FFD700'][Math.floor(Math.random() * 3)], // Orange/Red/Yellow
+                             size: Math.random() * 0.2 + 0.1,
+                             life: 10 + Math.random() * 10,
+                             type: 'fuse'
+                         });
+                    }
+                });
+
+                 // Draw Tool Preview (Optional: show where block/bomb will be placed)
+                 if (mousePos.gridX >= 0 && mousePos.gridX < WORLD_WIDTH && mousePos.gridY >= 0 && mousePos.gridY < WORLD_HEIGHT) {
+                     ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+                     ctx.lineWidth = 1;
+                     ctx.strokeRect(
+                         mousePos.gridX * PIXEL_SIZE,
+                         mousePos.gridY * PIXEL_SIZE,
+                         PIXEL_SIZE,
+                         PIXEL_SIZE
+                     );
+                 }
+            }
+
+            // --- Physics Update ---
+            function updatePhysics(deltaTime) { // deltaTime can be used for frame-rate independence
+                // 1. Update Particles
+                particles = particles.filter(p => {
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    // Apply gravity to non-sparkle particles
+                    if(p.type !== 'sparkle' && p.type !== 'fuse') {
+                         p.vy += GRAVITY * 0.5; // Less gravity for particles
+                    }
+                    p.life -= 1; // Simple countdown life
+                    return p.life > 0;
+                });
+
+                // 2. Update Physics Bodies
+                physicsBodies = physicsBodies.filter((body, index) => {
+                    // Apply gravity
+                    body.vy += GRAVITY;
+
+                    // Update position
+                    let nextX = body.x + body.vx;
+                    let nextY = body.y + body.vy;
+
+                    // --- Collision Detection (Simple Grid Check) ---
+                    let collided = false;
+                    // Check collision points around the body radius
+                    const collisionPoints = [
+                        { dx: 0, dy: 0 }, // Center
+                        { dx: 0, dy: body.radius }, // Bottom
+                        { dx: 0, dy: -body.radius }, // Top
+                        { dx: body.radius, dy: 0 }, // Right
+                        { dx: -body.radius, dy: 0 } // Left
+                    ];
+
+                    for (const point of collisionPoints) {
+                         const checkX = Math.floor(nextX + point.dx);
+                         const checkY = Math.floor(nextY + point.dy);
+
+                         if (checkX >= 0 && checkX < WORLD_WIDTH && checkY >= 0 && checkY < WORLD_HEIGHT) {
+                             const block = world[checkX][checkY];
+                             if (block !== BLOCK_TYPES.AIR && !block.fluid) { // Collided with solid block
+                                 collided = true;
+
+                                 // Simple bounce effect
+                                 if (point.dy !== 0) { // Vertical collision
+                                      body.vy *= -0.4; // Reduce vertical speed on bounce
+                                      // Apply friction
+                                      body.vx *= 0.8;
+                                      // Adjust Y to be just outside the block
+                                      nextY = (point.dy > 0) ? checkY - body.radius - 0.01 : checkY + 1 + body.radius + 0.01;
+
+                                 }
+                                 if (point.dx !== 0) { // Horizontal collision
+                                      body.vx *= -0.6; // Reduce horizontal speed
+                                       // Adjust X
+                                      nextX = (point.dx > 0) ? checkX - body.radius - 0.01 : checkX + 1 + body.radius + 0.01;
+                                 }
+                                 // Dampen velocity overall on collision
+                                 body.vx *= 0.9;
+                                 body.vy *= 0.9;
+                                 break; // Stop checking points after first collision
+                             }
+                         }
+                    }
+
+                    body.x = nextX;
+                    body.y = nextY;
+
+
+                    // Handle bomb fuse and explosion
+                    if (body.type === 'bomb') {
+                        body.fuse -= 1; // Tick down fuse
+                        if (body.fuse <= 0) {
+                            explodeBomb(body.x, body.y, body.radius * 5); // Explode when fuse runs out
+                            return false; // Remove the bomb body
+                        }
+                    }
+
+                    // Remove if out of bounds (allow some margin below world)
+                    return body.y < WORLD_HEIGHT + 20;
+                });
+
+
+                // 3. Fluid Physics (Water) - Process bottom-up, right-to-left to prioritize downward flow
+                // Create a copy of the world state for checking to avoid cascading updates in one step
+                 let worldCopy = world.map(arr => arr.slice());
+
+                 for (let y = WORLD_HEIGHT - 1; y >= 0; y--) {
+                     for (let x = WORLD_WIDTH - 1; x >= 0; x--) {
+                        if (worldCopy[x][y] === BLOCK_TYPES.WATER) {
+                             // Rule 1: Flow Down
+                             if (y < WORLD_HEIGHT - 1 && worldCopy[x][y + 1] === BLOCK_TYPES.AIR) {
+                                 if (world[x][y + 1] === BLOCK_TYPES.AIR) { // Check original world to allow swap
+                                    world[x][y] = BLOCK_TYPES.AIR;
+                                    world[x][y + 1] = BLOCK_TYPES.WATER;
+                                    continue; // Move to next block after flowing down
+                                 }
+                             }
+
+                             // Rule 2: Flow Sideways (if cannot flow down)
+                             const dir = (Math.random() < 0.5) ? -1 : 1; // Randomly check left or right first
+
+                             // Check direction 1
+                             if (x + dir >= 0 && x + dir < WORLD_WIDTH && worldCopy[x + dir][y] === BLOCK_TYPES.AIR) {
+                                 if (world[x + dir][y] === BLOCK_TYPES.AIR) { // Check original world
+                                     if (Math.random() < WATER_SPREAD_CHANCE) {
+                                        world[x][y] = BLOCK_TYPES.AIR;
+                                        world[x + dir][y] = BLOCK_TYPES.WATER;
+                                        continue; // Move to next block
+                                     }
+                                 }
+                             }
+
+                             // Check direction 2 (the other way)
+                             if (x - dir >= 0 && x - dir < WORLD_WIDTH && worldCopy[x - dir][y] === BLOCK_TYPES.AIR) {
+                                if (world[x - dir][y] === BLOCK_TYPES.AIR) { // Check original world
+                                    if (Math.random() < WATER_SPREAD_CHANCE) {
+                                        world[x][y] = BLOCK_TYPES.AIR;
+                                        world[x - dir][y] = BLOCK_TYPES.WATER;
+                                        continue; // Move to next block
+                                     }
+                                 }
+                             }
+
+                             // Rule 3: Flow Diagonally Down (less likely)
+                             if (y < WORLD_HEIGHT - 1) {
+                                  if (x + dir >= 0 && x + dir < WORLD_WIDTH && worldCopy[x + dir][y+1] === BLOCK_TYPES.AIR) {
+                                     if (world[x + dir][y+1] === BLOCK_TYPES.AIR) { // Check original world
+                                         if (Math.random() < WATER_SPREAD_CHANCE * 0.5) { // Less likely than horizontal
+                                             world[x][y] = BLOCK_TYPES.AIR;
+                                             world[x + dir][y+1] = BLOCK_TYPES.WATER;
+                                         }
+                                     }
+                                  }
+                             }
+
+                         }
+                     }
+                 }
+            }
+
+            // --- Tool Functions ---
+            function useTool(gridX, gridY) {
+                 if (gridX < 0 || gridX >= WORLD_WIDTH || gridY < 0 || gridY >= WORLD_HEIGHT) return; // Out of bounds
+
+                 switch (activeTool) {
+                    case 'bomb':
+                        placeBomb(gridX, gridY);
+                        break;
+                    case 'block':
+                        // Only place if the target block is AIR or fluid/transparent
+                        const targetBlock = world[gridX][gridY];
+                         if(targetBlock === BLOCK_TYPES.AIR || targetBlock.fluid || targetBlock.transparent) {
+                            world[gridX][gridY] = selectedBlock; // Place the selected solid block
+                         }
+                         // Optional: Add sound effect
+                        break;
+                    case 'water':
+                         // Only place if the target block is AIR
+                         if(world[gridX][gridY] === BLOCK_TYPES.AIR) {
+                            world[gridX][gridY] = BLOCK_TYPES.WATER;
+                         }
+                         // Optional: Add sound effect
+                        break;
+                    case 'destroy': // Example of a potential new tool
+                        destroyBlock(gridX, gridY);
+                        break;
+                 }
+            }
+
+            // --- Bomb Logic (Polished) ---
+            function placeBomb(gridX, gridY) {
+                // Check if location is valid (e.g., not inside solid block? or allow it?)
+                // Let's allow placing anywhere for fun
+
+                 physicsBodies.push({
+                     x: gridX + 0.5, // Center in grid cell
+                     y: gridY + 0.5,
+                     vx: 0,
+                     vy: -0.1, // Slight initial pop-up
+                     radius: 0.4, // Size of the bomb body
+                     color: '#333', // Dark grey bomb
+                     type: 'bomb',
+                     fuse: 60 // ~1 second fuse at 60 FPS
+                 });
+                 // Add placing sound effect?
+            }
+
+            function explodeBomb(centerX, centerY, radius) {
+                 const explosionRadius = Math.max(1, radius); // Ensure radius is at least 1
+                 const explosionRadiusSq = explosionRadius * explosionRadius;
+
+                 // Create Explosion Particles (more particles, controlled velocity)
+                 const particleCount = Math.floor(explosionRadius * 15); // Scale particles with radius
+                 for (let i = 0; i < particleCount; i++) {
+                     const angle = Math.random() * Math.PI * 2;
+                     const speed = Math.random() * 0.2 + 0.05; // Control particle speed
+                     const dist = Math.random() * explosionRadius * 0.8; // Particles originate within the blast
+                     particles.push({
+                         x: centerX + Math.cos(angle) * dist,
+                         y: centerY + Math.sin(angle) * dist,
+                         vx: Math.cos(angle) * speed + (Math.random() - 0.5) * 0.1, // Add some randomness
+                         vy: Math.sin(angle) * speed + (Math.random() - 0.5) * 0.1 - 0.05, // Slight upward bias
+                         color: ['#FF4500', '#FFA500', '#FFD700', '#8B4513'][Math.floor(Math.random() * 4)], // Fire/debris colors
+                         size: Math.random() * 0.4 + 0.2,
+                         life: Math.random() * 40 + 20, // Longer life for bigger boom?
+                         type: 'explosion'
+                     });
+                 }
+
+                 // Affect Blocks within Radius
+                 const startX = Math.max(0, Math.floor(centerX - explosionRadius));
+                 const endX = Math.min(WORLD_WIDTH - 1, Math.floor(centerX + explosionRadius));
+                 const startY = Math.max(0, Math.floor(centerY - explosionRadius));
+                 const endY = Math.min(WORLD_HEIGHT - 1, Math.floor(centerY + explosionRadius));
+
+                 for (let x = startX; x <= endX; x++) {
+                     for (let y = startY; y <= endY; y++) {
+                         const dx = x - centerX + 0.5; // Distance from center of block to explosion center
+                         const dy = y - centerY + 0.5;
+                         const distSq = dx * dx + dy * dy;
+
+                         if (distSq <= explosionRadiusSq) {
+                             const block = world[x][y];
+                             if (block !== BLOCK_TYPES.AIR && block !== BLOCK_TYPES.BEDROCK) { // Don't affect air or bedrock
+
+                                // Calculate damage based on distance (more damage closer to center)
+                                const damageFactor = 1 - (distSq / explosionRadiusSq); // 1 at center, 0 at edge
+                                const damage = Math.max(1, Math.floor(damageFactor * 5)); // Base damage * factor
+
+                                // Apply damage (or just destroy for simplicity)
+                                // For simplicity here, we'll just destroy the block
+                                // To implement health: block.health -= damage; if (block.health <=0) world[x][y] = AIR;
+
+                                 // --- Create Debris ---
+                                 // Create debris only if block is destroyed and not fluid
+                                 if (!block.fluid) {
+                                     const debrisCount = Math.random() < 0.6 ? 1 : 0; // Chance of creating debris
+                                     for (let i = 0; i < debrisCount; i++) {
+                                         const angle = Math.atan2(dy, dx); // Angle from explosion center to block
+                                         const speed = (Math.random() * 0.5 + 0.2) * damageFactor; // Faster debris closer
+                                         physicsBodies.push({
+                                             x: x + 0.5,
+                                             y: y + 0.5,
+                                             vx: Math.cos(angle) * speed + (Math.random() - 0.5) * 0.2,
+                                             vy: Math.sin(angle) * speed - Math.random() * 0.1, // Add upward thrust
+                                             radius: Math.random() * 0.2 + 0.1, // Small debris
+                                             color: block.color, // Debris matches block color
+                                             type: 'debris'
+                                         });
+                                     }
+                                 }
+
+                                // Destroy block (replace with AIR)
+                                world[x][y] = BLOCK_TYPES.AIR;
+
+                             }
+                         }
+                     }
+                 }
+                 // Add explosion sound effect?
+            }
+
+             // --- Block Destruction (Example Tool Function) ---
+            function destroyBlock(gridX, gridY) {
+                 if (gridX < 0 || gridX >= WORLD_WIDTH || gridY < 0 || gridY >= WORLD_HEIGHT) return;
+                 const block = world[gridX][gridY];
+
+                 if (block !== BLOCK_TYPES.AIR && block !== BLOCK_TYPES.BEDROCK) {
+                      // Create particle effect for breaking
+                      for(let i=0; i<5; i++){
+                           particles.push({
+                               x: gridX + Math.random(),
+                               y: gridY + Math.random(),
+                               vx: (Math.random() - 0.5) * 0.1,
+                               vy: (Math.random() - 0.5) * 0.1,
+                               color: block.color,
+                               size: Math.random() * 0.2 + 0.1,
+                               life: 15 + Math.random() * 10,
+                               type: 'break'
+                           });
+                      }
+                      world[gridX][gridY] = BLOCK_TYPES.AIR;
+                      // Add breaking sound effect?
+                 }
+            }
+
+
+            // --- Event Listeners ---
+            function updateMousePos(event) {
+                const rect = canvas.getBoundingClientRect();
+                let clientX, clientY;
+                 if (event.touches && event.touches.length > 0) {
+                     clientX = event.touches[0].clientX;
+                     clientY = event.touches[0].clientY;
+                 } else {
+                     clientX = event.clientX;
+                     clientY = event.clientY;
+                 }
+
+                mousePos.x = clientX - rect.left;
+                mousePos.y = clientY - rect.top;
+                mousePos.gridX = Math.floor(mousePos.x / PIXEL_SIZE);
+                mousePos.gridY = Math.floor(mousePos.y / PIXEL_SIZE);
+            }
+
+            function handleMouseDown(event) {
+                 updateMousePos(event);
+                 isMouseDown = true;
+                 useTool(mousePos.gridX, mousePos.gridY); // Use tool on initial click
+             }
+
+            function handleMouseUp(event) {
+                 isMouseDown = false;
+             }
+
+            function handleMouseMove(event) {
+                 updateMousePos(event);
+                 if (isMouseDown) {
+                     // Continuously use tool while mouse is down and moving (optional)
+                     // Be careful with performance for tools like bomb placement
+                     if (activeTool === 'block' || activeTool === 'water' || activeTool === 'destroy') {
+                         useTool(mousePos.gridX, mousePos.gridY);
+                     }
+                 }
+             }
+
+            // Use appropriate events for touch and mouse
+            canvas.addEventListener('mousedown', handleMouseDown);
+            canvas.addEventListener('mouseup', handleMouseUp);
+            canvas.addEventListener('mouseleave', handleMouseUp); // Stop drawing if mouse leaves canvas
+            canvas.addEventListener('mousemove', handleMouseMove);
+
+            canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handleMouseDown(e); }, { passive: false });
+            canvas.addEventListener('touchend', (e) => { e.preventDefault(); handleMouseUp(e); }, { passive: false });
+            canvas.addEventListener('touchcancel', (e) => { e.preventDefault(); handleMouseUp(e); }, { passive: false });
+            canvas.addEventListener('touchmove', (e) => { e.preventDefault(); handleMouseMove(e); }, { passive: false });
+
+
+            // Tool selection logic
+            const toolButtons = document.querySelectorAll('.tool-btn');
+            toolButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    activeTool = button.dataset.tool; // Get tool name from data attribute
+                    toolButtons.forEach(btn => btn.classList.remove('active'));
+                    button.classList.add('active');
+                    currentToolUI.textContent = activeTool.toUpperCase(); // Update UI
+                });
+            });
+
+            // --- FPS Counter ---
+            function updateFPSDisplay(now) {
+                 const deltaTime = now - lastFrameTime;
+                 lastFrameTime = now;
+                 frameCount++;
+
+                 // Update FPS display roughly every second
+                 if (now % 1000 < deltaTime ) { // Check if a second boundary was crossed
+                     fps = Math.round(frameCount / (deltaTime / 1000) * 1000 /1000); // Calculate average FPS over the interval
+                     fpsDisplay.textContent = `FPS: ${fps}`;
+                     frameCount = 0; // Reset frame count for the next second
+                 }
+                 return deltaTime / 1000; // Return deltaTime in seconds
+            }
+
+
+            // --- Game Loop ---
+            function gameLoop(timestamp) {
+                const deltaTime = updateFPSDisplay(timestamp); // Calculate deltaTime and update FPS counter
+
+                updatePhysics(deltaTime); // Update game logic and physics
+                render(); // Draw the current state
+
+                requestAnimationFrame(gameLoop); // Request the next frame
+            }
+
+            // --- Start the Game ---
+            generateWorld(); // Create the initial world state
+            currentToolUI.textContent = activeTool.toUpperCase(); // Set initial tool UI text
+            lastFrameTime = performance.now(); // Initialize timer
+            requestAnimationFrame(gameLoop); // Start the loop!
+        }
+
+    </script>
+</body>
+</html>
+<ALOASK-SEPARATE-EDITORS><ALOASK-SEPARATE-EDITORS>
