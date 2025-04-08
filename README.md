@@ -1,2 +1,6 @@
-2d pixel game open source and no this isnt an ip logger
-enjoy for yourself updates are going to be frequent 
+Katworld Is a 2D pixelated simulator! you destory stuff
+Build Stuff and even bomb stuff! 💣
+Frequent updates!
+Frequent bug fixes! (to complain about a bug please dm me at pa_ce.)
+Best thing is the fact this is open source!
+Enjoy Katworld -Made by simkatproductions
