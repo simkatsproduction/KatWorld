@@ -119,23 +119,22 @@
     <div id="game-container" class="screen">
         <canvas id="game-canvas"></canvas>
         <div id="game-ui">
-            {/* Updated UI Structure */}
             <div>TOOL: <span id="current-tool-ui">BOMB</span></div>
             <div id="selected-block-ui" style="display: none;">BLOCK: <span id="current-block-name">DIRT</span></div> 
             <div id="mouse-coords">X: -- Y: --</div>
             <div id="fps">FPS: --</div>
         </div>
         <div id="tools">
-        
             <button class="tool-btn active" id="bomb-btn" data-tool="bomb">BOMB<span>[1]</span></button>
             <button class="tool-btn" id="block-btn" data-tool="block">BLOCK<span>[2] ([/])</span></button> 
             <button class="tool-btn" id="water-btn" data-tool="water">WATER<span>[3]</span></button>
             <button class="tool-btn" id="destroy-btn" data-tool="destroy">DESTROY<span>[4]</span></button>
-             <button class="tool-btn" id="sand-btn" data-tool="sand">SAND<span>[5]</span></button>
-             <button class="tool-btn" id="glass-btn" data-tool="glass">GLASS<span>[6]</span></button>
+            <button class="tool-btn" id="sand-btn" data-tool="sand">SAND<span>[5]</span></button>
+            <button class="tool-btn" id="glass-btn" data-tool="glass">GLASS<span>[6]</span></button>
             <button class="tool-btn" id="ignite-btn" data-tool="ignite">IGNITE<span>[7]</span></button>
             <button class="tool-btn" id="picker-btn" data-tool="picker">PICKER<span>[8]</span></button>
-             <button class="tool-btn" id="tnt-btn" data-tool="tnt">TNT<span>[9]</span></button> */}
+            <button class="tool-btn" id="tnt-btn" data-tool="tnt">TNT<span>[9]</span></button>
+            <button class="tool-btn" id="acid-btn" data-tool="acid">ACID<span>[0]</span></button>
         </div>
     </div>
 
@@ -198,12 +197,14 @@
             const PHYSICS_SUBSTEPS = 3;
             const TNT_FUSE_TIME = 5; // Short fuse for chain reactions
             const TNT_RADIUS = 4; // Explosion radius for TNT
+            const ACID_CORROSION_CHANCE = 0.3; // Chance to corrode adjacent blocks
+            const ACID_CORROSION_DELAY = 30; // Frames between corrosion attempts
 
             // --- Canvas Setup ---
             canvas.width = WORLD_WIDTH * PIXEL_SIZE;
             canvas.height = WORLD_HEIGHT * PIXEL_SIZE;
 
-            // --- Block Types (Added TNT, Obsidian, Brick, Plant) ---
+            // --- Block Types (Added TNT, Obsidian, Brick, Plant, Acid) ---
             const BLOCK_TYPES = {
                 AIR:        {id: 0, color: 'transparent', name: 'Air'},
                 DIRT:       {id: 1, color: '#8B4513', health: 1, name: 'Dirt'},
@@ -219,10 +220,11 @@
                 BEDROCK:    {id: 11, color: '#4A4A4A', health: Infinity, name: 'Bedrock'},
                 SAND:       {id: 12, color: '#F4A460', health: 1, gravity: true, name: 'Sand'},
                 GLASS:      {id: 13, color: 'rgba(210, 240, 255, 0.6)', transparent: true, health: 0.2, name: 'Glass'}, // Lower health
-                TNT:        {id: 14, color: '#FF4500', altColor: '#FFA500', health: 1, explosive: true, name: 'TNT'}, // NEW
-                OBSIDIAN:   {id: 15, color: '#3B1F4A', health: 15, name: 'Obsidian'}, // NEW - Strong
-                BRICK:      {id: 16, color: '#B22222', altColor: '#8B0000', health: 4, name: 'Brick'}, // NEW
-                PLANT:      {id: 17, color: '#90EE90', transparent: true, health: 0.1, name: 'Plant'}, // NEW - Decorative
+                TNT:        {id: 14, color: '#FF4500', altColor: '#FFA500', health: 1, explosive: true, name: 'TNT'},
+                OBSIDIAN:   {id: 15, color: '#3B1F4A', health: 15, name: 'Obsidian'}, // Strong
+                BRICK:      {id: 16, color: '#B22222', altColor: '#8B0000', health: 4, name: 'Brick'},
+                PLANT:      {id: 17, color: '#90EE90', transparent: true, health: 0.1, name: 'Plant'}, // Decorative
+                ACID:       {id: 18, color: 'rgba(50, 255, 50, 0.7)', fluid: true, corrosive: true, name: 'Acid'} // New acid block
             };
             const BLOCK_ID_MAP = {};
             for (const key in BLOCK_TYPES) { BLOCK_ID_MAP[BLOCK_TYPES[key].id] = BLOCK_TYPES[key]; }
@@ -230,7 +232,8 @@
             // --- Placeable Blocks for Cycling ---
             const PLACEABLE_BLOCKS = [
                 BLOCK_TYPES.DIRT, BLOCK_TYPES.STONE, BLOCK_TYPES.WOOD, BLOCK_TYPES.SAND, BLOCK_TYPES.GLASS,
-                BLOCK_TYPES.TNT, BLOCK_TYPES.OBSIDIAN, BLOCK_TYPES.BRICK, BLOCK_TYPES.PLANT, BLOCK_TYPES.WATER // Water also placeable with Block tool now
+                BLOCK_TYPES.TNT, BLOCK_TYPES.OBSIDIAN, BLOCK_TYPES.BRICK, BLOCK_TYPES.PLANT, BLOCK_TYPES.WATER,
+                BLOCK_TYPES.ACID // Add acid to placeable blocks
             ];
             let currentPlaceableIndex = 0; // Index for cycling
 
@@ -251,6 +254,7 @@
             let frameAccumulator = 0;
             let frameCount = 0;
             let fps = 0;
+            let acidCorrosionTimer = 0; // Timer for acid corrosion
 
             // UI Elements References
             const fpsDisplay = document.getElementById('fps');
@@ -349,7 +353,7 @@
                 }
              }
 
-            // --- Rendering (Added patterns for TNT, Brick) ---
+            // --- Rendering (Added patterns for TNT, Brick, Acid) ---
             function render() {
                 ctx.fillStyle = '#87CEEB';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -376,7 +380,12 @@
                                 // Simple alternating pattern for TNT
                                 ctx.fillStyle = ((x + y) % 2 === 0) ? block.color : block.altColor || block.color;
                                 ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
-                                // Add "TNT" text? (Maybe too small/cluttered)
+                                // Add "TNT" text
+                                ctx.fillStyle = '#000';
+                                ctx.font = '6px "Press Start 2P"';
+                                ctx.textAlign = 'center';
+                                ctx.textBaseline = 'middle';
+                                ctx.fillText('TNT', x * PIXEL_SIZE + PIXEL_SIZE/2, y * PIXEL_SIZE + PIXEL_SIZE/2);
                                 skipDefaultFill = true;
                             } else if (block === BLOCK_TYPES.BRICK) {
                                 // Simple brick pattern look
@@ -392,6 +401,24 @@
                                 } else {
                                      ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE * 0.1, PIXEL_SIZE*0.85);
                                      ctx.fillRect(x * PIXEL_SIZE + PIXEL_SIZE*0.9, y * PIXEL_SIZE, PIXEL_SIZE * 0.1, PIXEL_SIZE*0.85);
+                                }
+                                skipDefaultFill = true;
+                            } else if (block === BLOCK_TYPES.ACID) {
+                                // Acid with bubbling effect
+                                ctx.fillStyle = block.color;
+                                ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
+                                // Bubbles
+                                if (Math.random() < 0.05) {
+                                    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                                    const bubbleSize = Math.random() * 0.2 + 0.1;
+                                    ctx.beginPath();
+                                    ctx.arc(
+                                        x * PIXEL_SIZE + PIXEL_SIZE * Math.random(),
+                                        y * PIXEL_SIZE + PIXEL_SIZE * Math.random(),
+                                        bubbleSize * PIXEL_SIZE,
+                                        0, Math.PI * 2
+                                    );
+                                    ctx.fill();
                                 }
                                 skipDefaultFill = true;
                             }
@@ -432,7 +459,7 @@
                  }
             }
 
-            // --- Physics Update (Water Fix, TNT Fuse) ---
+            // --- Physics Update (Water Fix, TNT Fuse, Acid Corrosion) ---
             function updatePhysics(deltaTime) {
                 const timeFactor = Math.min(deltaTime * 60, 3); // Factor + limit excessive jump
 
@@ -516,7 +543,7 @@
                 });
 
 
-                 // 3. Block Physics (Water & Sand)
+                 // 3. Block Physics (Water & Sand & Acid)
                  let worldCopy = world.map(arr => arr.slice());
                  const sweepLeftToRight = (frameCount % 2 === 0);
 
@@ -546,7 +573,7 @@
                                                  world[x][y] = BLOCK_TYPES.AIR; // Sand leaves air
                                                  world[checkX][y+1] = BLOCK_TYPES.SAND;
                                                  // Need 'continue' equivalent for the outer loop if moved
-                                                 gotoNextBlockIteration(); // Use labeled continue/break or flags if needed
+                                                 gotoNextBlockIteration; // Use labeled continue/break or flags if needed
                                             }
                                         }
                                     }
@@ -583,10 +610,83 @@
                                     if(spreadDone) continue;
                                }
                           }
+                          // --- Acid Physics (Similar to water but with corrosion) ---
+                          else if (currentBlock === BLOCK_TYPES.ACID) {
+                               const blockBelow = (y + 1 < WORLD_HEIGHT) ? worldCopy[x][y+1] : BLOCK_TYPES.BEDROCK;
+                               // Flow down into AIR first priority
+                               if (blockBelow === BLOCK_TYPES.AIR) {
+                                   if (world[x][y+1] !== BLOCK_TYPES.ACID) { // Ensure not already processed
+                                        world[x][y] = BLOCK_TYPES.AIR;
+                                        world[x][y+1] = BLOCK_TYPES.ACID;
+                                        continue;
+                                   }
+                               } else { // If blocked below by non-air or already processed, try spreading
+                                   const dir = (Math.random() < 0.5) ? -1 : 1;
+                                   let spreadDone = false;
+                                   // Try spreading into AIR sideways first
+                                   for (let d = 0; d < 2; d++) {
+                                        const checkX = x + (d === 0 ? dir : -dir);
+                                        if (checkX >= 0 && checkX < WORLD_WIDTH && worldCopy[checkX][y] === BLOCK_TYPES.AIR) {
+                                            if (world[checkX][y] !== BLOCK_TYPES.ACID && Math.random() < WATER_SPREAD_CHANCE) {
+                                                world[x][y] = BLOCK_TYPES.AIR;
+                                                world[checkX][y] = BLOCK_TYPES.ACID;
+                                                spreadDone = true;
+                                                break; // Spread once per frame per block
+                                            }
+                                        }
+                                   }
+                                    if(spreadDone) continue;
+                               }
+                          }
                           // Labeled continue target (use sparingly)
                           nextBlockIteration:;
                      } // End x loop
                  } // End y loop
+                 
+                 // 4. Acid Corrosion (Every few frames)
+                 acidCorrosionTimer += timeFactor;
+                 if (acidCorrosionTimer >= ACID_CORROSION_DELAY) {
+                     acidCorrosionTimer = 0;
+                     // Find all acid blocks and corrode adjacent blocks
+                     for (let x = 0; x < WORLD_WIDTH; x++) {
+                         for (let y = 0; y < WORLD_HEIGHT; y++) {
+                             if (world[x][y] === BLOCK_TYPES.ACID) {
+                                 // Check adjacent blocks (4 directions)
+                                 const directions = [
+                                     {dx: 1, dy: 0}, {dx: -1, dy: 0},
+                                     {dx: 0, dy: 1}, {dx: 0, dy: -1}
+                                 ];
+                                 
+                                 for (const dir of directions) {
+                                     const nx = x + dir.dx;
+                                     const ny = y + dir.dy;
+                                     if (nx >= 0 && nx < WORLD_WIDTH && ny >= 0 && ny < WORLD_HEIGHT) {
+                                         const neighbor = world[nx][ny];
+                                         // Acid can corrode most blocks except bedrock and obsidian
+                                         if (neighbor && neighbor !== BLOCK_TYPES.AIR && 
+                                             neighbor !== BLOCK_TYPES.BEDROCK && 
+                                             neighbor !== BLOCK_TYPES.OBSIDIAN &&
+                                             neighbor !== BLOCK_TYPES.ACID) {
+                                             if (Math.random() < ACID_CORROSION_CHANCE) {
+                                                 // Create corrosion effect
+                                                 particles.push({
+                                                     x: nx + 0.5, y: ny + 0.5,
+                                                     vx: (Math.random()-0.5)*0.05, vy: -Math.random()*0.05,
+                                                     color: '#50FF50',
+                                                     size: Math.random()*0.3+0.2,
+                                                     life: 20+Math.random()*10,
+                                                     type: 'acid'
+                                                 });
+                                                 // Destroy the block
+                                                 world[nx][ny] = BLOCK_TYPES.AIR;
+                                             }
+                                         }
+                                     }
+                                 }
+                             }
+                         }
+                     }
+                 }
             } // End updatePhysics
 
             // --- Tool Functions (Handle New Tools & Block Cycling) ---
@@ -615,12 +715,12 @@
                     case 'destroy': destroyBlock(gridX, gridY, 1); break; // Tool destroys 1 block
                     case 'sand':    if(isPassable(currentBlock) || currentBlock === BLOCK_TYPES.PLANT) { world[gridX][gridY] = BLOCK_TYPES.SAND; } break;
                     case 'glass':   if(isPassable(currentBlock) || currentBlock === BLOCK_TYPES.PLANT) { world[gridX][gridY] = BLOCK_TYPES.GLASS; } break;
-                    case 'ignite': // NEW
+                    case 'ignite': 
                         if (currentBlock === BLOCK_TYPES.TNT) {
                             triggerTNT(gridX, gridY);
                         }
                         break;
-                    case 'picker': // NEW
+                    case 'picker': 
                         if (currentBlock && currentBlock !== BLOCK_TYPES.AIR && currentBlock !== BLOCK_TYPES.BEDROCK) {
                             // Find the picked block in PLACEABLE_BLOCKS
                             const index = PLACEABLE_BLOCKS.findIndex(b => b.id === currentBlock.id);
@@ -628,10 +728,17 @@
                                 currentPlaceableIndex = index;
                                 selectedBlock = PLACEABLE_BLOCKS[currentPlaceableIndex];
                                 setActiveTool('block'); // Switch to block tool
-                            } else {
-                                // If block isn't directly placeable (e.g., ore), maybe select stone/dirt?
-                                // Or just do nothing. Doing nothing is simpler.
                             }
+                        }
+                        break;
+                    case 'tnt':
+                        if(isPassable(currentBlock) || currentBlock === BLOCK_TYPES.PLANT) {
+                            world[gridX][gridY] = BLOCK_TYPES.TNT;
+                        }
+                        break;
+                    case 'acid':
+                        if(isPassable(currentBlock) || currentBlock === BLOCK_TYPES.PLANT) {
+                            world[gridX][gridY] = BLOCK_TYPES.ACID;
                         }
                         break;
                  }
@@ -704,10 +811,9 @@
                          radius: 0.1, // Small, doesn't need collision
                          color: '#FF0000', // Not really visible
                          type: 'tnt_fuse',
-                         fuse: TNT_FUSE_TIME + Math.random() * 5 // Slight random delay
+                         fuse: TNT_FUSE_TIME + Math.random() * 2 // Slight random delay
                      });
-                      // Don't destroy block here, explosion logic handles it if needed,
-                      // or fuse logic will when it explodes. Or clear it for fuse:
+                      // Clear the TNT block
                       world[gridX][gridY] = BLOCK_TYPES.AIR;
                       // Add ignition particle
                       particles.push({ x: gridX+0.5, y: gridY+0.5, vx:0, vy:-0.05, color:'#FFF', size:0.3, life:TNT_FUSE_TIME, type:'fuse'});
@@ -777,7 +883,7 @@
             function handleMouseMove(event) {
                  updateMousePos(event);
                  // Allow continuous action for relevant tools
-                 if (isMouseDown && (activeTool === 'block' || activeTool === 'water' || activeTool === 'destroy' || activeTool === 'sand' || activeTool === 'glass' || activeTool === 'ignite')) {
+                 if (isMouseDown && (activeTool === 'block' || activeTool === 'water' || activeTool === 'destroy' || activeTool === 'sand' || activeTool === 'glass' || activeTool === 'ignite' || activeTool === 'tnt' || activeTool === 'acid')) {
                      useTool(mousePos.gridX, mousePos.gridY);
                  }
              }
@@ -799,8 +905,10 @@
                      case '4': targetButtonId = 'destroy-btn'; break;
                      case '5': targetButtonId = 'sand-btn'; break;
                      case '6': targetButtonId = 'glass-btn'; break;
-                     case '7': targetButtonId = 'ignite-btn'; break; // New Tool
-                     case '8': targetButtonId = 'picker-btn'; break; // New Tool
+                     case '7': targetButtonId = 'ignite-btn'; break;
+                     case '8': targetButtonId = 'picker-btn'; break;
+                     case '9': targetButtonId = 'tnt-btn'; break;
+                     case '0': targetButtonId = 'acid-btn'; break;
                      // Block Cycling Keys
                      case '[':
                          if (activeTool === 'block') {
@@ -853,7 +961,8 @@
                     // If clicking a specific block button (sand/glass), also update selectedBlock
                     if (tool === 'sand') selectedBlock = BLOCK_TYPES.SAND;
                     else if (tool === 'glass') selectedBlock = BLOCK_TYPES.GLASS;
-                    // Potentially add more direct block buttons here (TNT, etc.)
+                    else if (tool === 'tnt') selectedBlock = BLOCK_TYPES.TNT;
+                    else if (tool === 'acid') selectedBlock = BLOCK_TYPES.ACID;
 
                     // Set the active tool state
                     setActiveTool(tool);
@@ -897,5 +1006,4 @@
         } // End initGame
     </script>
 </body>
-</html>
-<ALOASK-SEPARATE-EDITORS><ALOASK-SEPARATE-EDITORS>
+</html><ALOASK-SEPARATE-EDITORS><ALOASK-SEPARATE-EDITORS>
